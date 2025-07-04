@@ -1189,12 +1189,14 @@ GLFWbool _glfwConnectX11(int platformID, _GLFWplatform* platform)
         .pollJoystick = _glfwPollJoystickLinux,
         .getMappingName = _glfwGetMappingNameLinux,
         .updateGamepadGUID = _glfwUpdateGamepadGUIDLinux,
+        .createJoystickMotion = _glfwCreateJoystickMotionLinux,
 #else
         .initJoysticks = _glfwInitJoysticksNull,
         .terminateJoysticks = _glfwTerminateJoysticksNull,
         .pollJoystick = _glfwPollJoystickNull,
         .getMappingName = _glfwGetMappingNameNull,
         .updateGamepadGUID = _glfwUpdateGamepadGUIDNull,
+        .createJoystickMotion = _glfwCreateJoystickMotionNull,
 #endif
         .freeMonitor = _glfwFreeMonitorX11,
         .getMonitorPos = _glfwGetMonitorPosX11,

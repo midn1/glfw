@@ -142,11 +142,13 @@ static GLFWbool openJoystickDevice(const char* path)
     char evBits[(EV_CNT + 7) / 8] = {0};
     char keyBits[(KEY_CNT + 7) / 8] = {0};
     char absBits[(ABS_CNT + 7) / 8] = {0};
+    char propBits[(INPUT_PROP_CNT + 7) / 8] = {0};
     struct input_id id;
 
     if (ioctl(linjs.fd, EVIOCGBIT(0, sizeof(evBits)), evBits) < 0 ||
         ioctl(linjs.fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) < 0 ||
         ioctl(linjs.fd, EVIOCGBIT(EV_ABS, sizeof(absBits)), absBits) < 0 ||
+        ioctl(linjs.fd, EVIOCGPROP(sizeof(propBits)), propBits) < 0 ||
         ioctl(linjs.fd, EVIOCGID, &id) < 0)
     {
         _glfwInputError(GLFW_PLATFORM_ERROR,
@@ -158,6 +160,12 @@ static GLFWbool openJoystickDevice(const char* path)
 
     // Ensure this device supports the events expected of a joystick
     if (!isBitSet(EV_ABS, evBits))
+    {
+        close(linjs.fd);
+        return GLFW_FALSE;
+    }
+
+    if (isBitSet(INPUT_PROP_ACCELEROMETER, propBits))
     {
         close(linjs.fd);
         return GLFW_FALSE;
@@ -234,12 +242,12 @@ static GLFWbool openJoystickDevice(const char* path)
     memcpy(&js->linjs, &linjs, sizeof(linjs));
 
     pollAbsState(js);
+    
+    _glfwCreateJoystickMotionLinux(js);
 
     _glfwInputJoystick(js, GLFW_CONNECTED);
     return GLFW_TRUE;
 }
-
-#undef isBitSet
 
 // Frees all resources associated with the specified joystick
 //
@@ -419,6 +427,47 @@ GLFWbool _glfwPollJoystickLinux(_GLFWjoystick* js, int mode)
         else if (e.type == EV_ABS)
             handleAbsEvent(js, e.code, e.value);
     }
+    
+    if(js->motionInit && js->motion.linmo.fd > 0) {
+        for (;;)
+        {
+            struct input_event e;
+
+            errno = 0;
+            if (read(js->motion.linmo.fd, &e, sizeof(e)) < 0)
+            {
+                break;
+            }
+
+            if (e.type == EV_ABS)
+            {
+                if (e.code == ABS_X)
+                {
+                    js->motion.linacc[0] = e.value / (float) js->motion.linmo.xresolution * 9.81;
+                }
+                else if (e.code == ABS_Y)
+                {
+                    js->motion.linacc[1] = e.value / (float) js->motion.linmo.yresolution * 9.81;
+                }
+                else if (e.code == ABS_Z)
+                {
+                    js->motion.linacc[2] = e.value / (float) js->motion.linmo.zresolution * 9.81;
+                }
+                else if (e.code == ABS_RX)
+                {
+                    js->motion.rotvel[0] = e.value / (float) js->motion.linmo.rxresolution;
+                }
+                else if (e.code == ABS_RY)
+                {
+                    js->motion.rotvel[1] = e.value / (float) js->motion.linmo.ryresolution;
+                }
+                else if (e.code == ABS_RZ)
+                {
+                    js->motion.rotvel[2] = e.value / (float) js->motion.linmo.rzresolution;
+                }
+            }
+        }
+    }
 
     return js->connected;
 }
@@ -431,6 +480,116 @@ const char* _glfwGetMappingNameLinux(void)
 void _glfwUpdateGamepadGUIDLinux(char* guid)
 {
 }
+
+void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
+{
+    _GLFWmotion *mo = &js->motion;
+    
+    if(mo->linmo.fd)
+    {
+        return;
+    }
+    
+    unsigned int jsevidx;
+    if(sscanf(js->linjs.path, "/dev/input/event%u", &jsevidx) == 0)
+    {
+        return;
+    }
+    
+    char motionpath[256];
+    snprintf(motionpath, sizeof(motionpath), "/dev/input/event%u", jsevidx + 1);
+    
+    mo->linmo.fd = open(motionpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (mo->linmo.fd == -1)
+    {
+        return;
+    }
+
+    char evBits[(EV_CNT + 7) / 8] = {0};
+    char keyBits[(KEY_CNT + 7) / 8] = {0};
+    char absBits[(ABS_CNT + 7) / 8] = {0};
+    char propBits[(INPUT_PROP_CNT + 7) / 8] = {0};
+    struct input_id id;
+
+    if (ioctl(mo->linmo.fd, EVIOCGBIT(0, sizeof(evBits)), evBits) < 0 ||
+        ioctl(mo->linmo.fd, EVIOCGBIT(EV_KEY, sizeof(keyBits)), keyBits) < 0 ||
+        ioctl(mo->linmo.fd, EVIOCGBIT(EV_ABS, sizeof(absBits)), absBits) < 0 ||
+        ioctl(mo->linmo.fd, EVIOCGPROP(sizeof(propBits)), propBits) < 0 ||
+        ioctl(mo->linmo.fd, EVIOCGID, &id) < 0)
+    {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+
+    // Ensure this device is actually for motion
+    if (!isBitSet(INPUT_PROP_ACCELEROMETER, propBits))
+    {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    // Ensure this device supports the events expected of a motion device
+    if (!isBitSet(EV_ABS, evBits))
+    {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    struct input_absinfo abs;
+    
+    if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_X), &abs) < 0) {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    mo->linmo.xresolution = abs.resolution;
+    
+    if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_Y), &abs) < 0) {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    mo->linmo.yresolution = abs.resolution;
+    
+    if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_Z), &abs) < 0) {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    mo->linmo.zresolution = abs.resolution;
+    
+    if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_RX), &abs) < 0) {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    mo->linmo.rxresolution = abs.resolution;
+    
+    if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_RY), &abs) < 0) {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    mo->linmo.ryresolution = abs.resolution;
+    
+    if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_RZ), &abs) < 0) {
+        close(mo->linmo.fd);
+        mo->linmo.fd = -1;
+        return;
+    }
+    
+    mo->linmo.rzresolution = abs.resolution;
+}
+
+#undef isBitSet
 
 #endif // GLFW_BUILD_LINUX_JOYSTICK
 

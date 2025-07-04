@@ -54,3 +54,6 @@ void _glfwUpdateGamepadGUIDNull(char* guid)
 {
 }
 
+void _glfwCreateJoystickMotionNull(_GLFWjoystick* js)
+{
+}

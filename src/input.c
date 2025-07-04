@@ -1357,6 +1357,29 @@ GLFWAPI int glfwJoystickIsGamepad(int jid)
     return js->mapping != NULL;
 }
 
+GLFWAPI GLFWmotion* glfwJoystickGetMotion(int jid)
+{
+    assert(jid >= GLFW_JOYSTICK_1);
+    assert(jid <= GLFW_JOYSTICK_LAST);
+    
+    _GLFW_REQUIRE_INIT_OR_RETURN(GLFW_FALSE);
+    
+    if (!initJoysticks())
+        return GLFW_FALSE;
+    
+    _GLFWjoystick* js = _glfw.joysticks + jid;
+    if (!js->connected)
+        return GLFW_FALSE;
+    
+    if (!js->motionInit)
+    {
+        js->motionInit = GLFW_TRUE;
+        _glfw.platform.createJoystickMotion(js);
+    }
+    
+    return (GLFWmotion*) &js->motion;
+}
+
 GLFWAPI const char* glfwGetGamepadName(int jid)
 {
     _GLFWjoystick* js;

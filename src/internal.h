@@ -76,6 +76,7 @@ typedef struct _GLFWmonitor     _GLFWmonitor;
 typedef struct _GLFWcursor      _GLFWcursor;
 typedef struct _GLFWmapelement  _GLFWmapelement;
 typedef struct _GLFWmapping     _GLFWmapping;
+typedef struct _GLFWmotion      _GLFWmotion;
 typedef struct _GLFWjoystick    _GLFWjoystick;
 typedef struct _GLFWtls         _GLFWtls;
 typedef struct _GLFWmutex       _GLFWmutex;
@@ -640,6 +641,17 @@ struct _GLFWmapping
     _GLFWmapelement axes[6];
 };
 
+// Motion structure
+//
+struct _GLFWmotion
+{
+    float linacc[3];
+    float rotvel[3];
+    
+    // This is defined in platform.h
+    GLFW_PLATFORM_MOTION_STATE
+};
+
 // Joystick structure
 //
 struct _GLFWjoystick
@@ -656,6 +668,8 @@ struct _GLFWjoystick
     void*           userPointer;
     char            guid[33];
     _GLFWmapping*   mapping;
+    GLFWbool        motionInit;
+    _GLFWmotion     motion;
 
     // This is defined in platform.h
     GLFW_PLATFORM_JOYSTICK_STATE
@@ -704,6 +718,7 @@ struct _GLFWplatform
     GLFWbool (*pollJoystick)(_GLFWjoystick*,int);
     const char* (*getMappingName)(void);
     void (*updateGamepadGUID)(char*);
+    void (*createJoystickMotion)(_GLFWjoystick*);
     // monitor
     void (*freeMonitor)(_GLFWmonitor*);
     void (*getMonitorPos)(_GLFWmonitor*,int*,int*);
