@@ -242,8 +242,6 @@ static GLFWbool openJoystickDevice(const char* path)
     memcpy(&js->linjs, &linjs, sizeof(linjs));
 
     pollAbsState(js);
-    
-    _glfwCreateJoystickMotionLinux(js);
 
     _glfwInputJoystick(js, GLFW_CONNECTED);
     return GLFW_TRUE;
@@ -428,13 +426,15 @@ GLFWbool _glfwPollJoystickLinux(_GLFWjoystick* js, int mode)
             handleAbsEvent(js, e.code, e.value);
     }
     
-    if(js->motionInit && js->motion.linmo.fd > 0) {
+    if(js->motion) {
+        _GLFWmotion *mo = js->motion;
+        
         for (;;)
         {
             struct input_event e;
 
             errno = 0;
-            if (read(js->motion.linmo.fd, &e, sizeof(e)) < 0)
+            if (read(mo->linmo.fd, &e, sizeof(e)) < 0)
             {
                 break;
             }
@@ -443,27 +443,27 @@ GLFWbool _glfwPollJoystickLinux(_GLFWjoystick* js, int mode)
             {
                 if (e.code == ABS_X)
                 {
-                    js->motion.linacc[0] = e.value / (float) js->motion.linmo.xresolution * 9.81;
+                    mo->linacc[0] = e.value / (float) mo->linmo.xresolution * 9.81;
                 }
                 else if (e.code == ABS_Y)
                 {
-                    js->motion.linacc[1] = e.value / (float) js->motion.linmo.yresolution * 9.81;
+                    mo->linacc[1] = e.value / (float) mo->linmo.yresolution * 9.81;
                 }
                 else if (e.code == ABS_Z)
                 {
-                    js->motion.linacc[2] = e.value / (float) js->motion.linmo.zresolution * 9.81;
+                    mo->linacc[2] = e.value / (float) mo->linmo.zresolution * 9.81;
                 }
                 else if (e.code == ABS_RX)
                 {
-                    js->motion.rotvel[0] = e.value / (float) js->motion.linmo.rxresolution;
+                    mo->rotvel[0] = e.value / (float) mo->linmo.rxresolution;
                 }
                 else if (e.code == ABS_RY)
                 {
-                    js->motion.rotvel[1] = e.value / (float) js->motion.linmo.ryresolution;
+                    mo->rotvel[1] = e.value / (float) mo->linmo.ryresolution;
                 }
                 else if (e.code == ABS_RZ)
                 {
-                    js->motion.rotvel[2] = e.value / (float) js->motion.linmo.rzresolution;
+                    mo->rotvel[2] = e.value / (float) mo->linmo.rzresolution;
                 }
             }
         }
@@ -483,16 +483,20 @@ void _glfwUpdateGamepadGUIDLinux(char* guid)
 
 void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
 {
-    _GLFWmotion *mo = &js->motion;
+    js->motionInit = GLFW_TRUE;
     
-    if(mo->linmo.fd)
-    {
+    if(js->motion)
         return;
-    }
+    
+    _GLFWmotion *mo = _glfw_calloc(1, sizeof(*mo));
+    
+    if(!mo)
+        return;
     
     unsigned int jsevidx;
     if(sscanf(js->linjs.path, "/dev/input/event%u", &jsevidx) == 0)
     {
+        _glfw_free(mo);
         return;
     }
     
@@ -502,6 +506,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     mo->linmo.fd = open(motionpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (mo->linmo.fd == -1)
     {
+        _glfw_free(mo);
         return;
     }
 
@@ -518,7 +523,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
         ioctl(mo->linmo.fd, EVIOCGID, &id) < 0)
     {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
 
@@ -526,7 +531,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     if (!isBitSet(INPUT_PROP_ACCELEROMETER, propBits))
     {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -534,7 +539,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     if (!isBitSet(EV_ABS, evBits))
     {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -542,7 +547,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     
     if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_X), &abs) < 0) {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -550,7 +555,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     
     if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_Y), &abs) < 0) {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -558,7 +563,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     
     if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_Z), &abs) < 0) {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -566,7 +571,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     
     if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_RX), &abs) < 0) {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -574,7 +579,7 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     
     if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_RY), &abs) < 0) {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
@@ -582,11 +587,13 @@ void _glfwCreateJoystickMotionLinux(_GLFWjoystick* js)
     
     if (ioctl(mo->linmo.fd, EVIOCGABS(ABS_RZ), &abs) < 0) {
         close(mo->linmo.fd);
-        mo->linmo.fd = -1;
+        _glfw_free(mo);
         return;
     }
     
     mo->linmo.rzresolution = abs.resolution;
+    
+    js->motion = mo;
 }
 
 #undef isBitSet

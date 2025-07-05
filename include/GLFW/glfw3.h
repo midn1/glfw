@@ -1415,6 +1415,16 @@ typedef struct GLFWwindow GLFWwindow;
  */
 typedef struct GLFWcursor GLFWcursor;
 
+/*! @brief Opaque motion object.
+ *
+ *  Opaque motion object.
+ *
+ *  @see @ref motion_object
+ *
+ *  @ingroup input
+ */
+typedef struct GLFWmotion GLFWmotion;
+
 /*! @brief The function pointer type for memory allocation callbacks.
  *
  *  This is the function pointer type for memory allocation callbacks.  A memory
@@ -5769,6 +5779,8 @@ GLFWAPI void* glfwGetJoystickUserPointer(int jid);
  *  @ingroup input
  */
 GLFWAPI int glfwJoystickIsGamepad(int jid);
+
+GLFWAPI GLFWmotion* glfwJoystickGetMotion(int jid);
 
 /*! @brief Sets the joystick configuration callback.
  *

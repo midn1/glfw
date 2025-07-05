@@ -669,7 +669,7 @@ struct _GLFWjoystick
     char            guid[33];
     _GLFWmapping*   mapping;
     GLFWbool        motionInit;
-    _GLFWmotion     motion;
+    _GLFWmotion*    motion;
 
     // This is defined in platform.h
     GLFW_PLATFORM_JOYSTICK_STATE

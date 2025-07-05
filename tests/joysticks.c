@@ -56,6 +56,7 @@
 
 static GLFWwindow* window;
 static int joysticks[GLFW_JOYSTICK_LAST + 1];
+static GLFWmotion *motions[GLFW_JOYSTICK_LAST + 1];
 static int joystick_count = 0;
 
 static void error_callback(int error, const char* description)
@@ -203,7 +204,11 @@ int main(void)
     for (jid = GLFW_JOYSTICK_1;  jid <= GLFW_JOYSTICK_LAST;  jid++)
     {
         if (glfwJoystickPresent(jid))
-            joysticks[joystick_count++] = jid;
+        {
+            joysticks[joystick_count] = jid;
+            motions[joystick_count] = glfwJoystickGetMotion(jid);
+            joystick_count++;
+        }
     }
 
     glfwSetJoystickCallback(joystick_callback);
@@ -329,6 +334,12 @@ int main(void)
                 }
                 else
                     nk_label(nk, "Joystick has no gamepad mapping", NK_TEXT_LEFT);
+                
+                if(motions[i]) {
+                    float *f = (float*) motions[i];
+                    nk_labelf(nk, NK_TEXT_LEFT, "Accel: %6.02f %6.02f %6.02f", f[0], f[1], f[2]);
+                    nk_labelf(nk, NK_TEXT_LEFT, "Rot: %6.02i %6.02i %6.02i", (int)f[3], (int)f[4], (int)f[5]);
+                }
             }
 
             nk_end(nk);
